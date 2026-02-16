@@ -1,3 +1,14 @@
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Bot activo");
+});
+
+app.listen(process.env.PORT || 4000, () => {
+  console.log("Servidor web activo");
+});
+
 const {
   Client,
   GatewayIntentBits,
@@ -11,10 +22,11 @@ const {
   Events
 } = require("discord.js");
 
+
 const fs = require("fs");
 
 // ===== CONFIG SISTEMA CUENTAS =====
-const ID_CANAL_CUENTAS = "https://discord.com/channels/1465579629002752175/1465586004739231764";
+const ID_CANAL_CUENTAS = "1465586004739231764";
 const ID_ROL_STAFF = "1465580669668429856";
 
 const client = new Client({
