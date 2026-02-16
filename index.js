@@ -11,6 +11,12 @@ const {
   Events
 } = require("discord.js");
 
+const fs = require("fs");
+
+// ===== CONFIG SISTEMA CUENTAS =====
+const ID_CANAL_CUENTAS = "https://discord.com/channels/1465579629002752175/1465586004739231764";
+const ID_ROL_STAFF = "1465580669668429856";
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -160,6 +166,61 @@ client.on("messageCreate", async message => {
     return message.reply("⚠️ Si tenés un error, enviá una captura de pantalla.");
   }
 
+});
+
+// ================= SISTEMA DE CUENTAS =================
+client.on("messageCreate", async (message) => {
+
+  if (message.author.bot) return;
+  if (!message.content.startsWith("!cuenta")) return;
+
+  // Verificar rol staff
+  if (!message.member.roles.cache.has(ID_ROL_STAFF)) {
+    return message.reply("❌ No tenés permiso para usar este comando.");
+  }
+
+  const args = message.content.split(" ").slice(1);
+
+  if (args.length < 4) {
+    return message.reply("Uso:\n!cuenta correo contraseña juegos imagenURL");
+  }
+
+  const correo = args[0];
+  const contraseña = args[1];
+  const imagen = args[args.length - 1];
+  const juegos = args.slice(2, args.length - 1).join(" ");
+
+  // Leer contador
+  const data = JSON.parse(fs.readFileSync("./contador.json"));
+  data.numero += 1;
+  fs.writeFileSync("./contador.json", JSON.stringify(data, null, 2));
+
+  const numeroFormateado = String(data.numero).padStart(3, "0");
+
+  const canal = await client.channels.fetch(ID_CANAL_CUENTAS).catch(() => null);
+
+  if (!canal) {
+    return message.reply("❌ No se encontró el canal de cuentas.");
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎮 Cuenta #${numeroFormateado}`)
+    .addFields(
+      { name: "📧 Correo", value: correo },
+      { name: "🔐 Contraseña", value: `||${contraseña}||` },
+      { name: "🕹 Juegos", value: juegos }
+    )
+    .setImage(imagen)
+    .setColor("Blue")
+    .setTimestamp();
+
+  await canal.send({ embeds: [embed] });
+
+  // Borra mensaje original
+  await message.delete().catch(() => null);
+
+  message.channel.send(`✅ Cuenta #${numeroFormateado} enviada.`)
+    .then(msg => setTimeout(() => msg.delete().catch(() => null), 3000));
 });
 
 
