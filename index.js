@@ -1,17 +1,15 @@
 const express = require("express");
 const app = express();
 
+const PORT = process.env.PORT;
+
 app.get("/", (req, res) => {
   res.send("Bot activo");
 });
 
-const PORT = process.env.PORT;
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor web activo en puerto ${PORT}`);
 });
-
-
 
 const {
   Client,
@@ -28,11 +26,29 @@ const {
 
 const fs = require("fs");
 
-// ===== IDS =====
+// ===== CONFIG SISTEMA CUENTAS =====
+const ID_CANAL_CUENTAS = "1465586004739231764";
+const ID_ROL_STAFF = "1465580669668429856";
+
+// ===== CONFIG VERIFICACION =====
 const ID_CANAL_VERIFICACION = "1465579629774508035";
 const ID_ROL_MIEMBRO = "1465581457857581067";
 
-  // ===== MENSAJE VERIFICACIÓN =====
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers // necesario para asignar roles
+  ]
+});
+
+const ticketsAbiertos = new Map();
+
+client.once("ready", async () => {
+  console.log(`Bot listo como ${client.user.tag}`);
+
+  // ===== MENSAJE DE VERIFICACIÓN =====
   const canalVerificacion = await client.channels.fetch(ID_CANAL_VERIFICACION).catch(() => null);
   if (canalVerificacion) {
     const embedVerificacion = new EmbedBuilder()
@@ -44,82 +60,61 @@ Para poder ver todos los canales es necesario verificarte, hacer esto es muy sim
       )
       .setColor("Red");
 
-    const boton = new ActionRowBuilder().addComponents(
+    const botonVerificar = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("verificar")
         .setLabel("✅ Verificar")
         .setStyle(ButtonStyle.Success)
     );
 
-    await canalVerificacion.send({ embeds: [embedVerificacion], components: [boton] });
+    await canalVerificacion.send({ embeds: [embedVerificacion], components: [botonVerificar] });
   }
 
-  client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isButton()) return;
-  if (interaction.customId !== "verificar") return;
-
-  try {
-    const member = interaction.member;
-    if (!member) return interaction.reply({ content: "❌ No se pudo verificar.", ephemeral: true });
-
-    // Verifica si ya tiene el rol
-    if (member.roles.cache.has(ID_ROL_MIEMBRO)) {
-      return interaction.reply({ content: "⚠️ Ya estás verificado.", ephemeral: true });
-    }
-
-    // Intenta agregar el rol
-    await member.roles.add(ID_ROL_MIEMBRO);
-    await interaction.reply({ content: "✅ ¡Te has verificado correctamente!", ephemeral: true });
-  } catch (err) {
-    console.error("Error al asignar rol:", err);
-    await interaction.reply({ content: "❌ Hubo un error al verificarte.", ephemeral: true });
-  }
-});
-
-// ===== CONFIG SISTEMA CUENTAS =====
-const ID_CANAL_CUENTAS = "1465586004739231764";
-const ID_ROL_STAFF = "1465580669668429856";
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
-});
-
-const ticketsAbiertos = new Map();
-
-client.once("ready", async () => {
-  console.log(`Bot listo como ${client.user.tag}`);
-
+  // ===== PANEL DE TICKETS =====
   const canalPanel = await client.channels.fetch("1465585688018813009").catch(() => null);
-  if (!canalPanel) return console.log("No se encontró el canal del panel.");
+  if (canalPanel) {
+    const embedTickets = new EmbedBuilder()
+      .setTitle("🎫 Tickets")
+      .setDescription("Bienvenidos a la sección de tickets! Podés crear uno abajo.")
+      .setColor("Red");
 
-  const embed = new EmbedBuilder()
-    .setTitle("🎫 Tickets")
-    .setDescription("Bienvenidos a la sección de tickets! Podés crear uno abajo.")
-    .setColor("Red");
+    const menu = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("ticket_menu")
+        .setPlaceholder("Selecciona una categoría")
+        .addOptions([
+          { label: "Soporte", value: "soporte", description: "Problemas técnicos" },
+          { label: "Compras", value: "compras", description: "Pagos y productos" },
+          { label: "Reportes", value: "reportes", description: "Reportar usuarios" }
+        ])
+    );
 
-  const menu = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("ticket_menu")
-      .setPlaceholder("Selecciona una categoría")
-      .addOptions([
-        { label: "Soporte", value: "soporte", description: "Problemas técnicos" },
-        { label: "Compras", value: "compras", description: "Pagos y productos" },
-        { label: "Reportes", value: "reportes", description: "Reportar usuarios" }
-      ])
-  );
-
-  await canalPanel.send({ embeds: [embed], components: [menu] });
+    await canalPanel.send({ embeds: [embedTickets], components: [menu] });
+  }
 });
-
 
 // ================= INTERACCIONES =================
 client.on(Events.InteractionCreate, async interaction => {
 
-  // CREAR TICKET
+  // ===== BOTON DE VERIFICACION =====
+  if (interaction.isButton() && interaction.customId === "verificar") {
+    try {
+      const member = interaction.member;
+      if (!member) return interaction.reply({ content: "❌ No se pudo verificar.", ephemeral: true });
+
+      if (member.roles.cache.has(ID_ROL_MIEMBRO)) {
+        return interaction.reply({ content: "⚠️ Ya estás verificado.", ephemeral: true });
+      }
+
+      await member.roles.add(ID_ROL_MIEMBRO);
+      await interaction.reply({ content: "✅ ¡Te has verificado correctamente!", ephemeral: true });
+    } catch (err) {
+      console.error("Error al asignar rol:", err);
+      await interaction.reply({ content: "❌ Hubo un error al verificarte.", ephemeral: true });
+    }
+  }
+
+  // ===== INTERACCIONES DE TICKETS =====
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
 
     await interaction.deferReply({ ephemeral: true });
@@ -138,7 +133,7 @@ client.on(Events.InteractionCreate, async interaction => {
       permissionOverwrites: [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-        { id: "1465580669668429856", allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+        { id: ID_ROL_STAFF, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
       ],
     });
 
@@ -162,7 +157,7 @@ client.on(Events.InteractionCreate, async interaction => {
     );
 
     await canal.send({
-      content: `<@${interaction.user.id}> <@&1465580669668429856>`,
+      content: `<@${interaction.user.id}> <@&${ID_ROL_STAFF}>`,
       embeds: [embedTicket],
       components: [botonCerrar]
     });
@@ -172,61 +167,42 @@ client.on(Events.InteractionCreate, async interaction => {
     await interaction.editReply({ content: "✅ Ticket creado!" });
   }
 
-// CERRAR TICKET (BOTÓN)
-if (interaction.isButton() && interaction.customId === "cerrar_ticket") {
+  // ===== CERRAR TICKET =====
+  if (interaction.isButton() && interaction.customId === "cerrar_ticket") {
+    const esStaff = interaction.member.roles.cache.has(ID_ROL_STAFF);
+    if (!esStaff) return interaction.reply({ content: "❌ Solo el staff puede cerrar el ticket.", ephemeral: true });
 
-  const esStaff = interaction.member.roles.cache.some(
-    role => role.id === ID_ROL_STAFF
-  );
+    await interaction.deferReply({ ephemeral: true });
+    const canal = interaction.channel;
 
-  if (!esStaff) {
-    return interaction.reply({ content: "❌ Solo el staff puede cerrar el ticket.", ephemeral: true });
-  }
+    try {
+      const mensajes = await canal.messages.fetch({ limit: 100 });
+      const transcript = mensajes.map(m => `${m.author.tag}: ${m.content}`).reverse().join("\n");
+      const canalLogs = await interaction.guild.channels.fetch("1473033392118304960").catch(() => null);
 
-  await interaction.deferReply({ ephemeral: true });
+      if (canalLogs) {
+        const embedLog = new EmbedBuilder()
+          .setTitle("📁 Ticket Cerrado")
+          .setDescription(`Canal: ${canal.name}\nCerrado por: ${interaction.user.tag}`)
+          .setColor("Red")
+          .setTimestamp();
 
-  const canal = interaction.channel;
+        await canalLogs.send({
+          embeds: [embedLog],
+          files: [{ attachment: Buffer.from(transcript, "utf-8"), name: "transcript.txt" }]
+        });
+      }
 
-  try {
-    const mensajes = await canal.messages.fetch({ limit: 100 });
-
-    const transcript = mensajes
-      .map(m => `${m.author.tag}: ${m.content}`)
-      .reverse()
-      .join("\n");
-
-    const canalLogs = await interaction.guild.channels.fetch("1473033392118304960").catch(() => null);
-
-    if (canalLogs) {
-      const embedLog = new EmbedBuilder()
-        .setTitle("📁 Ticket Cerrado")
-        .setDescription(`Canal: ${canal.name}\nCerrado por: ${interaction.user.tag}`)
-        .setColor("Red")
-        .setTimestamp();
-
-      await canalLogs.send({
-        embeds: [embedLog],
-        files: [{
-          attachment: Buffer.from(transcript, "utf-8"),
-          name: "transcript.txt"
-        }]
-      });
+      await interaction.editReply({ content: "✅ Ticket cerrado correctamente." });
+    } catch (error) {
+      console.error(error);
+      await interaction.editReply({ content: "❌ Hubo un error al cerrar el ticket." });
     }
 
-    await interaction.editReply({ content: "✅ Ticket cerrado correctamente." });
-
-  } catch (error) {
-    console.error(error);
-    await interaction.editReply({ content: "❌ Hubo un error al cerrar el ticket." });
+    setTimeout(() => canal.delete().catch(() => null), 2000);
   }
 
-  setTimeout(() => {
-    canal.delete().catch(() => null);
-  }, 2000);
-}
-
 });
-
 
 // ================= RESPUESTAS AUTOMÁTICAS AVANZADAS =================
 const cooldownRespuestas = new Map();
