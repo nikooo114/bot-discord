@@ -5,9 +5,13 @@ app.get("/", (req, res) => {
   res.send("Bot activo");
 });
 
-app.listen(process.env.PORT || 4000, () => {
-  console.log("Servidor web activo");
+const PORT = process.env.PORT;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor web activo en puerto ${PORT}`);
 });
+
+
 
 const {
   Client,
