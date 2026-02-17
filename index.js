@@ -174,21 +174,21 @@ client.on("messageCreate", async message => {
 
   const respuestasAutomaticas = {
     saludo: {
-      palabras: ["hola", "buenas", "hey", "holi", "saludos"],
+      palabras: ["hola", "buenas", "hey", "holi", "saludos", "Hola"],
       titulo: "👋 Bienvenido",
-      descripcion: "Un miembro del staff te atenderá en breve.\nMientras tanto, podés explicar tu problema con detalle.",
+      descripcion: "Esto es un mensaje automatico. Un miembro del staff te atenderá en breve.\nMientras tanto, podés explicar el motivo del ticket con detalle.",
       color: 0x00ffcc
     },
     precios: {
-      palabras: ["precio", "precios", "cuánto", "cuanto", "valor", "vale"],
+      palabras: ["precio", "precios", "cuánto", "cuanto", "valor", "vale", "Precio", "Precios"],
       titulo: "💰 Información de Precios",
-      descripcion: "Podés consultar todos los precios actualizados en el canal de información del servidor.",
+      descripcion: "El VIP tiene un valor de 2.50 USD o 2.500 Pesos argentinos puedes abonar por MERCADO PAGO y PAYPAL. Una vez abonado el dinero deberas mandar una captura del comprobante de pago y automaticamente se te otorgara la compra realizada!",
       color: 0xffcc00
     },
     errores: {
       palabras: ["error", "bug", "falla", "problema", "no funciona", "crash"],
       titulo: "⚠️ Reporte de Error",
-      descripcion: "Por favor enviá una captura de pantalla y explicá detalladamente el problema.",
+      descripcion: "Por favor enviá una captura de pantalla y explicá detalladamente el problema. En cuanto un staff este disponible se te contestara.",
       color: 0xff0000
     }
   };
