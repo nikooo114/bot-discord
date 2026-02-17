@@ -71,7 +71,7 @@ client.on(Events.InteractionCreate, async interaction => {
   // CREAR TICKET
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.reply({ content: "🔒 Cerrando ticket...", ephemeral: true });
 
     if (ticketsAbiertos.has(interaction.user.id)) {
       return interaction.editReply({ content: "❌ Ya tenés un ticket abierto." });
@@ -121,44 +121,49 @@ client.on(Events.InteractionCreate, async interaction => {
     await interaction.editReply({ content: "✅ Ticket creado!" });
   }
 
-// CERRAR TICKET
-
-if (!interaction.member.roles.cache.has(1465580669668429856)) {
-  return interaction.reply({ content: "❌ Solo el staff puede cerrar este ticket.", ephemeral: true });
-}
-
+// CERRAR TICKET (BOTÓN)
 if (interaction.isButton() && interaction.customId === "cerrar_ticket") {
+
+  if (!interaction.member.roles.cache.has(ID_ROL_STAFF)) {
+    return interaction.reply({ content: "❌ Solo el staff puede cerrar el ticket.", ephemeral: true });
+  }
 
   await interaction.reply({ content: "🔒 Cerrando ticket...", ephemeral: true });
 
-  const mensajes = await interaction.channel.messages.fetch({ limit: 100 });
+  const canal = interaction.channel;
 
-  const transcript = mensajes
-    .map(m => `${m.author.tag}: ${m.content}`)
-    .reverse()
-    .join("\n");
+  try {
+    const mensajes = await canal.messages.fetch({ limit: 100 });
 
-  const canalLogs = await interaction.guild.channels.fetch("1473033392118304960").catch(() => null);
+    const transcript = mensajes
+      .map(m => `${m.author.tag}: ${m.content}`)
+      .reverse()
+      .join("\n");
 
-  if (canalLogs) {
-    const embedLog = new EmbedBuilder()
-      .setTitle("📁 Ticket Cerrado")
-      .setDescription(`Canal: ${interaction.channel.name}`)
-      .setColor("Black")
-      .setTimestamp();
+    const canalLogs = await interaction.guild.channels.fetch("1473033392118304960").catch(() => null);
 
-    await canalLogs.send({
-      embeds: [embedLog],
-      files: [{
-        attachment: Buffer.from(transcript, "utf-8"),
-        name: "transcript.txt"
-      }]
-    });
+    if (canalLogs) {
+      const embedLog = new EmbedBuilder()
+        .setTitle("📁 Ticket Cerrado")
+        .setDescription(`Canal: ${canal.name}\nCerrado por: ${interaction.user.tag}`)
+        .setColor("Red")
+        .setTimestamp();
+
+      await canalLogs.send({
+        embeds: [embedLog],
+        files: [{
+          attachment: Buffer.from(transcript, "utf-8"),
+          name: "transcript.txt"
+        }]
+      });
+    }
+
+  } catch (err) {
+    console.error(err);
   }
 
-  // Espera 2 segundos antes de borrar el canal
   setTimeout(() => {
-    interaction.channel.delete().catch(() => null);
+    canal.delete().catch(() => null);
   }, 2000);
 }
 
@@ -321,10 +326,19 @@ client.on("messageCreate", async (message) => {
     await message.delete().catch(() => null);
   }
 
-  // ===== $delete =====
-  if (comando === "$delete") {
+  if (!message.member.roles.cache.has(1465580669668429856)) {
+  return message.reply("❌ Solo el staff puede usar este comando.");
+}
 
-    const mensajes = await message.channel.messages.fetch({ limit: 100 });
+  // ===== $delete =====
+if (comando === "$delete") {
+
+  const canal = message.channel;
+
+  await message.reply("🔒 Cerrando ticket...");
+
+  try {
+    const mensajes = await canal.messages.fetch({ limit: 100 });
 
     const transcript = mensajes
       .map(m => `${m.author.tag}: ${m.content}`)
@@ -335,25 +349,29 @@ client.on("messageCreate", async (message) => {
 
     if (canalLogs) {
       const embedLog = new EmbedBuilder()
-        .setTitle("📁 Ticket Cerrado por Comando")
-        .setDescription(`Canal: ${message.channel.name}`)
+        .setTitle("📁 Ticket Cerrado (Comando)")
+        .setDescription(`Canal: ${canal.name}\nCerrado por: ${message.author.tag}`)
         .setColor("Red")
         .setTimestamp();
 
-      await canalLogs.send({
-        embeds: [embedLog],
-        files: [{
-          attachment: Buffer.from(transcript, "utf-8"),
-          name: "transcript.txt"
-        }]
-      });
+        await canalLogs.send({
+          embeds: [embedLog],
+          files: [{
+            attachment: Buffer.from(transcript, "utf-8"),
+            name: "transcript.txt"
+          }]
+        });
     }
 
-    await message.channel.send("🔒 Cerrando ticket en 3 segundos...");
-    setTimeout(() => {
-      message.channel.delete().catch(() => null);
-    }, 3000);
+  } catch (err) {
+    console.error(err);
   }
+
+  setTimeout(() => {
+    canal.delete().catch(() => null);
+  }, 2000);
+}
+
 
 });
 
