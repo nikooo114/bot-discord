@@ -116,7 +116,7 @@ client.on(Events.InteractionCreate, async interaction => {
       components: [botonCerrar]
     });
 
-    await canal.send("🤖 Mensaje automático:\nExplicá tu problema con el mayor detalle posible.");
+    await canal.send("🤖 Mensaje automático:  \nExplicá el motivo del ticket con el mayor detalle posible. 👽");
 
     await interaction.editReply({ content: "✅ Ticket creado!" });
   }
@@ -158,24 +158,62 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 
-// ================= RESPUESTAS AUTOMÁTICAS =================
+// ================= RESPUESTAS AUTOMÁTICAS AVANZADAS =================
+const cooldownRespuestas = new Map();
+
 client.on("messageCreate", async message => {
 
   if (message.author.bot) return;
   if (!message.channel.name.startsWith("ticket-")) return;
 
   const contenido = message.content.toLowerCase();
+  const canalId = message.channel.id;
 
-  if (contenido.includes("hola")) {
-    return message.reply("👋 Hola! En breve un staff te atenderá.");
-  }
+  // Evita repetir respuesta en menos de 10 segundos por canal
+  if (cooldownRespuestas.has(canalId)) return;
 
-  if (contenido.includes("precio")) {
-    return message.reply("💰 Podés consultar los precios en el canal de información.");
-  }
+  const respuestasAutomaticas = {
+    saludo: {
+      palabras: ["hola", "buenas", "hey", "holi", "saludos"],
+      titulo: "👋 Bienvenido",
+      descripcion: "Un miembro del staff te atenderá en breve.\nMientras tanto, podés explicar tu problema con detalle.",
+      color: 0x00ffcc
+    },
+    precios: {
+      palabras: ["precio", "precios", "cuánto", "cuanto", "valor", "vale"],
+      titulo: "💰 Información de Precios",
+      descripcion: "Podés consultar todos los precios actualizados en el canal de información del servidor.",
+      color: 0xffcc00
+    },
+    errores: {
+      palabras: ["error", "bug", "falla", "problema", "no funciona", "crash"],
+      titulo: "⚠️ Reporte de Error",
+      descripcion: "Por favor enviá una captura de pantalla y explicá detalladamente el problema.",
+      color: 0xff0000
+    }
+  };
 
-  if (contenido.includes("error")) {
-    return message.reply("⚠️ Si tenés un error, enviá una captura de pantalla.");
+  for (const categoria in respuestasAutomaticas) {
+
+    const { palabras, titulo, descripcion, color } = respuestasAutomaticas[categoria];
+
+    if (palabras.some(palabra => contenido.includes(palabra))) {
+
+      const embed = new EmbedBuilder()
+        .setTitle(titulo)
+        .setDescription(descripcion)
+        .setColor(color)
+        .setFooter({ text: "Sistema automático de asistencia" })
+        .setTimestamp();
+
+      await message.reply({ embeds: [embed] });
+
+      // Activar cooldown
+      cooldownRespuestas.set(canalId, true);
+      setTimeout(() => cooldownRespuestas.delete(canalId), 10000); // 10 segundos
+
+      break;
+    }
   }
 
 });
