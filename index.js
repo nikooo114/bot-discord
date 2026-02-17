@@ -71,7 +71,7 @@ client.on(Events.InteractionCreate, async interaction => {
   // CREAR TICKET
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
 
-    await interaction.reply({ content: "🔒 Cerrando ticket...", ephemeral: true });
+    await interaction.deferReply({ ephemeral: true });
 
     if (ticketsAbiertos.has(interaction.user.id)) {
       return interaction.editReply({ content: "❌ Ya tenés un ticket abierto." });
@@ -124,11 +124,15 @@ client.on(Events.InteractionCreate, async interaction => {
 // CERRAR TICKET (BOTÓN)
 if (interaction.isButton() && interaction.customId === "cerrar_ticket") {
 
-  if (!interaction.member.roles.cache.has(ID_ROL_STAFF)) {
+  const esStaff = interaction.member.roles.cache.some(
+    role => role.id === ID_ROL_STAFF
+  );
+
+  if (!esStaff) {
     return interaction.reply({ content: "❌ Solo el staff puede cerrar el ticket.", ephemeral: true });
   }
 
-  await interaction.reply({ content: "🔒 Cerrando ticket...", ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
 
   const canal = interaction.channel;
 
@@ -158,8 +162,11 @@ if (interaction.isButton() && interaction.customId === "cerrar_ticket") {
       });
     }
 
-  } catch (err) {
-    console.error(err);
+    await interaction.editReply({ content: "✅ Ticket cerrado correctamente." });
+
+  } catch (error) {
+    console.error(error);
+    await interaction.editReply({ content: "❌ Hubo un error al cerrar el ticket." });
   }
 
   setTimeout(() => {
@@ -326,33 +333,78 @@ client.on("messageCreate", async (message) => {
     await message.delete().catch(() => null);
   }
 
-  if (!message.member.roles.cache.has(1465580669668429856)) {
+const esStaff = message.member.roles.cache.some(role => role.id === 1465580669668429856);
+
+if (!esStaff) {
   return message.reply("❌ Solo el staff puede usar este comando.");
 }
 
-  // ===== $delete =====
-if (comando === "$delete") {
+  // ================= COMANDOS $ PARA TICKETS =================
+client.on("messageCreate", async (message) => {
 
-  const canal = message.channel;
+  if (message.author.bot) return;
+  if (!message.channel.name.startsWith("ticket-")) return;
+  if (!message.content.startsWith("$")) return;
 
-  await message.reply("🔒 Cerrando ticket...");
+  const comando = message.content.toLowerCase();
 
-  try {
-    const mensajes = await canal.messages.fetch({ limit: 100 });
+  const esStaff = message.member.roles.cache.some(
+    role => role.id === ID_ROL_STAFF
+  );
+
+  if (!esStaff) {
+    return message.reply("❌ Solo el staff puede usar este comando.");
+  }
+
+  // ===== $transcript =====
+  if (comando === "$transcript") {
+
+    const mensajes = await message.channel.messages.fetch({ limit: 100 });
 
     const transcript = mensajes
       .map(m => `${m.author.tag}: ${m.content}`)
       .reverse()
       .join("\n");
 
-    const canalLogs = await message.guild.channels.fetch("1473033392118304960").catch(() => null);
+    const embed = new EmbedBuilder()
+      .setTitle("📄 Transcripción del Ticket")
+      .setColor("Blue")
+      .setTimestamp();
 
-    if (canalLogs) {
-      const embedLog = new EmbedBuilder()
-        .setTitle("📁 Ticket Cerrado (Comando)")
-        .setDescription(`Canal: ${canal.name}\nCerrado por: ${message.author.tag}`)
-        .setColor("Red")
-        .setTimestamp();
+    await message.channel.send({
+      embeds: [embed],
+      files: [{
+        attachment: Buffer.from(transcript, "utf-8"),
+        name: "transcript.txt"
+      }]
+    });
+
+    await message.delete().catch(() => null);
+  }
+
+  // ===== $delete =====
+  if (comando === "$delete") {
+
+    await message.reply("🔒 Cerrando ticket...");
+
+    const canal = message.channel;
+
+    try {
+      const mensajes = await canal.messages.fetch({ limit: 100 });
+
+      const transcript = mensajes
+        .map(m => `${m.author.tag}: ${m.content}`)
+        .reverse()
+        .join("\n");
+
+      const canalLogs = await message.guild.channels.fetch("1473033392118304960").catch(() => null);
+
+      if (canalLogs) {
+        const embedLog = new EmbedBuilder()
+          .setTitle("📁 Ticket Cerrado (Comando)")
+          .setDescription(`Canal: ${canal.name}\nCerrado por: ${message.author.tag}`)
+          .setColor("Red")
+          .setTimestamp();
 
         await canalLogs.send({
           embeds: [embedLog],
@@ -361,17 +413,18 @@ if (comando === "$delete") {
             name: "transcript.txt"
           }]
         });
+      }
+
+    } catch (err) {
+      console.error(err);
     }
 
-  } catch (err) {
-    console.error(err);
+    setTimeout(() => {
+      canal.delete().catch(() => null);
+    }, 2000);
   }
 
-  setTimeout(() => {
-    canal.delete().catch(() => null);
-  }, 2000);
-}
-
+});
 
 });
 
