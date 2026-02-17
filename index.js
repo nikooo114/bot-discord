@@ -26,8 +26,55 @@ const {
   Events
 } = require("discord.js");
 
-
 const fs = require("fs");
+
+// ===== IDS =====
+const ID_CANAL_VERIFICACION = "1465579629774508035";
+const ID_ROL_MIEMBRO = "1465581457857581067";
+
+  // ===== MENSAJE VERIFICACIÓN =====
+  const canalVerificacion = await client.channels.fetch(ID_CANAL_VERIFICACION).catch(() => null);
+  if (canalVerificacion) {
+    const embedVerificacion = new EmbedBuilder()
+      .setTitle("Games Place ⭐")
+      .setDescription(
+`Hola! Gracias por unirte
+
+Para poder ver todos los canales es necesario verificarte, hacer esto es muy simple. Solo presiona el botón "Verificar" y se te otorgará el rango Miembro y podrás ver todos los canales!`
+      )
+      .setColor("Red");
+
+    const boton = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("verificar")
+        .setLabel("✅ Verificar")
+        .setStyle(ButtonStyle.Success)
+    );
+
+    await canalVerificacion.send({ embeds: [embedVerificacion], components: [boton] });
+  }
+
+  client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isButton()) return;
+  if (interaction.customId !== "verificar") return;
+
+  try {
+    const member = interaction.member;
+    if (!member) return interaction.reply({ content: "❌ No se pudo verificar.", ephemeral: true });
+
+    // Verifica si ya tiene el rol
+    if (member.roles.cache.has(ID_ROL_MIEMBRO)) {
+      return interaction.reply({ content: "⚠️ Ya estás verificado.", ephemeral: true });
+    }
+
+    // Intenta agregar el rol
+    await member.roles.add(ID_ROL_MIEMBRO);
+    await interaction.reply({ content: "✅ ¡Te has verificado correctamente!", ephemeral: true });
+  } catch (err) {
+    console.error("Error al asignar rol:", err);
+    await interaction.reply({ content: "❌ Hubo un error al verificarte.", ephemeral: true });
+  }
+});
 
 // ===== CONFIG SISTEMA CUENTAS =====
 const ID_CANAL_CUENTAS = "1465586004739231764";
