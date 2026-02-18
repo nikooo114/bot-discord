@@ -1,15 +1,6 @@
 const express = require("express");
 const app = express();
-
-const PORT = process.env.PORT;
-
-app.get("/", (req, res) => {
-  res.send("Bot activo");
-});
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Servidor web activo en puerto ${PORT}`);
-});
+const fs = require("fs");
 
 const {
   Client,
@@ -24,58 +15,86 @@ const {
   Events
 } = require("discord.js");
 
-const fs = require("fs");
+const { joinVoiceChannel } = require("@discordjs/voice");
 
-// ===== CONFIG SISTEMA CUENTAS =====
+/* ================== CONFIG ================== */
+
+const PORT = process.env.PORT;
+const TOKEN = process.env.TOKEN;
+
 const ID_CANAL_CUENTAS = "1465586004739231764";
 const ID_ROL_STAFF = "1465580669668429856";
-
-// ===== CONFIG VERIFICACION =====
 const ID_CANAL_VERIFICACION = "1465579629774508035";
 const ID_ROL_MIEMBRO = "1465581457857581067";
+const ID_PANEL_TICKETS = "1465585688018813009";
+const ID_CATEGORIA_TICKETS = "1473033607923765370";
+const ID_LOGS = "1473033392118304960";
+const ID_CANAL_VOZ = "1465579629774508036";
+
+/* ================== EXPRESS ================== */
+
+app.get("/", (req, res) => res.send("Bot activo"));
+app.listen(PORT, "0.0.0.0", () =>
+  console.log(`Servidor web activo en puerto ${PORT}`)
+);
+
+/* ================== CLIENT ================== */
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers // necesario para asignar roles
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
 const ticketsAbiertos = new Map();
+const cooldownRespuestas = new Map();
+
+/* ================== READY ================== */
 
 client.once("ready", async () => {
   console.log(`Bot listo como ${client.user.tag}`);
 
-  // ===== MENSAJE DE VERIFICACIÓN =====
+  const guild = client.guilds.cache.first();
+
+  // Conectar a canal de voz
+  const canalVoz = guild.channels.cache.get(ID_CANAL_VOZ);
+  if (canalVoz) {
+    joinVoiceChannel({
+      channelId: canalVoz.id,
+      guildId: guild.id,
+      adapterCreator: guild.voiceAdapterCreator
+    });
+    console.log("Conectado al canal de voz");
+  }
+
+  // Mensaje verificación
   const canalVerificacion = await client.channels.fetch(ID_CANAL_VERIFICACION).catch(() => null);
   if (canalVerificacion) {
-    const embedVerificacion = new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setTitle("Games Place ⭐")
-      .setDescription(
-`Hola! Gracias por unirte
-
-Para poder ver todos los canales es necesario verificarte, hacer esto es muy simple. Solo presiona el botón "Verificar" y se te otorgará el rango Miembro y podrás ver todos los canales!`
-      )
+      .setDescription("Presiona el botón para verificarte.")
       .setColor("Red");
 
-    const botonVerificar = new ActionRowBuilder().addComponents(
+    const boton = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("verificar")
         .setLabel("✅ Verificar")
         .setStyle(ButtonStyle.Success)
     );
 
-    await canalVerificacion.send({ embeds: [embedVerificacion], components: [botonVerificar] });
+    await canalVerificacion.send({ embeds: [embed], components: [boton] });
   }
 
-  // ===== PANEL DE TICKETS =====
-  const canalPanel = await client.channels.fetch("1465585688018813009").catch(() => null);
+  // Panel tickets
+  const canalPanel = await client.channels.fetch(ID_PANEL_TICKETS).catch(() => null);
   if (canalPanel) {
-    const embedTickets = new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setTitle("🎫 Tickets")
-      .setDescription("Bienvenidos a la sección de tickets! Podés crear uno abajo.")
+      .setDescription("Selecciona una categoría.")
       .setColor("Red");
 
     const menu = new ActionRowBuilder().addComponents(
@@ -83,45 +102,36 @@ Para poder ver todos los canales es necesario verificarte, hacer esto es muy sim
         .setCustomId("ticket_menu")
         .setPlaceholder("Selecciona una categoría")
         .addOptions([
-          { label: "Soporte", value: "soporte", description: "Problemas técnicos" },
-          { label: "Compras", value: "compras", description: "Pagos y productos" },
-          { label: "Reportes", value: "reportes", description: "Reportar usuarios" }
+          { label: "Soporte", value: "soporte" },
+          { label: "Compras", value: "compras" },
+          { label: "Reportes", value: "reportes" }
         ])
     );
 
-    await canalPanel.send({ embeds: [embedTickets], components: [menu] });
+    await canalPanel.send({ embeds: [embed], components: [menu] });
   }
 });
 
-// ================= INTERACCIONES =================
+/* ================== INTERACCIONES ================== */
+
 client.on(Events.InteractionCreate, async interaction => {
 
-  // ===== BOTON DE VERIFICACION =====
+  /* ===== VERIFICACIÓN ===== */
   if (interaction.isButton() && interaction.customId === "verificar") {
-    try {
-      const member = interaction.member;
-      if (!member) return interaction.reply({ content: "❌ No se pudo verificar.", ephemeral: true });
+    if (interaction.member.roles.cache.has(ID_ROL_MIEMBRO))
+      return interaction.reply({ content: "⚠️ Ya estás verificado.", ephemeral: true });
 
-      if (member.roles.cache.has(ID_ROL_MIEMBRO)) {
-        return interaction.reply({ content: "⚠️ Ya estás verificado.", ephemeral: true });
-      }
-
-      await member.roles.add(ID_ROL_MIEMBRO);
-      await interaction.reply({ content: "✅ ¡Te has verificado correctamente!", ephemeral: true });
-    } catch (err) {
-      console.error("Error al asignar rol:", err);
-      await interaction.reply({ content: "❌ Hubo un error al verificarte.", ephemeral: true });
-    }
+    await interaction.member.roles.add(ID_ROL_MIEMBRO);
+    return interaction.reply({ content: "✅ Verificado correctamente.", ephemeral: true });
   }
 
-  // ===== INTERACCIONES DE TICKETS =====
+  /* ===== CREAR TICKET ===== */
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_menu") {
 
     await interaction.deferReply({ ephemeral: true });
 
-    if (ticketsAbiertos.has(interaction.user.id)) {
-      return interaction.editReply({ content: "❌ Ya tenés un ticket abierto." });
-    }
+    if (ticketsAbiertos.has(interaction.user.id))
+      return interaction.editReply({ content: "❌ Ya tenes un ticket abierto." });
 
     const tipo = interaction.values[0];
     const prioridad = tipo === "reportes" ? "Alta" : "Normal";
@@ -129,25 +139,24 @@ client.on(Events.InteractionCreate, async interaction => {
     const canal = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.username}`,
       type: ChannelType.GuildText,
-      parent: "1473033607923765370",
+      parent: ID_CATEGORIA_TICKETS,
       permissionOverwrites: [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
         { id: ID_ROL_STAFF, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-      ],
+      ]
     });
 
     ticketsAbiertos.set(interaction.user.id, canal.id);
 
-    const embedTicket = new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setTitle("🎟 Nuevo Ticket")
       .addFields(
         { name: "Usuario", value: interaction.user.tag },
         { name: "Tipo", value: tipo },
         { name: "Prioridad", value: prioridad }
       )
-      .setColor("Green")
-      .setTimestamp();
+      .setColor("Green");
 
     const botonCerrar = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -158,302 +167,139 @@ client.on(Events.InteractionCreate, async interaction => {
 
     await canal.send({
       content: `<@${interaction.user.id}> <@&${ID_ROL_STAFF}>`,
-      embeds: [embedTicket],
+      embeds: [embed],
       components: [botonCerrar]
     });
-
-    await canal.send("🤖 Mensaje automático:  \nExplicá el motivo del ticket con el mayor detalle posible. 👽");
 
     await interaction.editReply({ content: "✅ Ticket creado!" });
   }
 
-  // ===== CERRAR TICKET =====
+  /* ===== CERRAR TICKET ===== */
   if (interaction.isButton() && interaction.customId === "cerrar_ticket") {
-    const esStaff = interaction.member.roles.cache.has(ID_ROL_STAFF);
-    if (!esStaff) return interaction.reply({ content: "❌ Solo el staff puede cerrar el ticket.", ephemeral: true });
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!interaction.member.roles.cache.has(ID_ROL_STAFF))
+      return interaction.reply({ content: "❌ Solo el staff puede cerrar.", ephemeral: true });
+
     const canal = interaction.channel;
+    const mensajes = await canal.messages.fetch({ limit: 100 });
 
-    try {
-      const mensajes = await canal.messages.fetch({ limit: 100 });
-      const transcript = mensajes.map(m => `${m.author.tag}: ${m.content}`).reverse().join("\n");
-      const canalLogs = await interaction.guild.channels.fetch("1473033392118304960").catch(() => null);
+    const transcript = mensajes.map(m => `${m.author.tag}: ${m.content}`).reverse().join("\n");
 
-      if (canalLogs) {
-        const embedLog = new EmbedBuilder()
+    const canalLogs = await interaction.guild.channels.fetch(ID_LOGS).catch(() => null);
+
+    if (canalLogs) {
+      await canalLogs.send({
+        embeds: [new EmbedBuilder()
           .setTitle("📁 Ticket Cerrado")
           .setDescription(`Canal: ${canal.name}\nCerrado por: ${interaction.user.tag}`)
-          .setColor("Red")
-          .setTimestamp();
-
-        await canalLogs.send({
-          embeds: [embedLog],
-          files: [{ attachment: Buffer.from(transcript, "utf-8"), name: "transcript.txt" }]
-        });
-      }
-
-      await interaction.editReply({ content: "✅ Ticket cerrado correctamente." });
-    } catch (error) {
-      console.error(error);
-      await interaction.editReply({ content: "❌ Hubo un error al cerrar el ticket." });
+          .setColor("Red")],
+        files: [{ attachment: Buffer.from(transcript), name: "transcript.txt" }]
+      });
     }
 
+    await interaction.reply({ content: "✅ Ticket cerrado.", ephemeral: true });
     setTimeout(() => canal.delete().catch(() => null), 2000);
   }
 
 });
 
-// ================= RESPUESTAS AUTOMÁTICAS AVANZADAS =================
-const cooldownRespuestas = new Map();
+/* ================== MENSAJES ================== */
 
 client.on("messageCreate", async message => {
 
   if (message.author.bot) return;
-  if (!message.channel.name.startsWith("ticket-")) return;
 
-  const contenido = message.content.toLowerCase();
-  const canalId = message.channel.id;
+  /* ===== RESPUESTAS AUTOMÁTICAS EN TICKETS ===== */
+  if (message.channel.name.startsWith("ticket-")) {
 
-  // Evita repetir respuesta en menos de 10 segundos por canal
-  if (cooldownRespuestas.has(canalId)) return;
+    if (cooldownRespuestas.has(message.channel.id)) return;
 
-  const respuestasAutomaticas = {
-    saludo: {
-      palabras: ["hola", "buenas", "hey", "holi", "saludos", "Hola"],
-      titulo: "👋 Bienvenido",
-      descripcion: "Esto es un mensaje automatico. Un miembro del staff te atenderá en breve.\nMientras tanto, podés explicar el motivo del ticket con detalle.",
-      color: 0x00ffcc
-    },
-    precios: {
-      palabras: ["precio", "precios", "cuánto", "cuanto", "valor", "vale", "Precio", "Precios"],
-      titulo: "💰 Información de Precios",
-      descripcion: "El VIP tiene un valor de 2.50 USD o 2.500 Pesos argentinos puedes abonar por MERCADO PAGO y PAYPAL. Una vez abonado el dinero deberas mandar una captura del comprobante de pago y automaticamente se te otorgara la compra realizada!",
-      color: 0xffcc00
-    },
-    errores: {
-      palabras: ["error", "bug", "falla", "problema", "no funciona", "crash"],
-      titulo: "⚠️ Reporte de Error",
-      descripcion: "Por favor enviá una captura de pantalla y explicá detalladamente el problema. En cuanto un staff este disponible se te contestara.",
-      color: 0xff0000
-    }
-  };
+    const contenido = message.content.toLowerCase();
 
-  for (const categoria in respuestasAutomaticas) {
+    const respuestas = {
+      saludo: ["hola", "buenas", "hey"],
+      precios: ["precio", "cuanto", "valor"],
+      errores: ["error", "bug", "problema"]
+    };
 
-    const { palabras, titulo, descripcion, color } = respuestasAutomaticas[categoria];
+    for (const tipo in respuestas) {
+      if (respuestas[tipo].some(p => contenido.includes(p))) {
 
-    if (palabras.some(palabra => contenido.includes(palabra))) {
+        const embed = new EmbedBuilder()
+          .setTitle("🤖 Respuesta automática")
+          .setDescription("Un staff te atenderá pronto.")
+          .setColor("Blue");
 
-      const embed = new EmbedBuilder()
-        .setTitle(titulo)
-        .setDescription(descripcion)
-        .setColor(color)
-        .setFooter({ text: "Sistema automático de asistencia" })
-        .setTimestamp();
+        await message.reply({ embeds: [embed] });
 
-      await message.reply({ embeds: [embed] });
-
-      // Activar cooldown
-      cooldownRespuestas.set(canalId, true);
-      setTimeout(() => cooldownRespuestas.delete(canalId), 10000); // 10 segundos
-
-      break;
-    }
-  }
-
-});
-
-// ================= SISTEMA DE CUENTAS =================
-client.on("messageCreate", async (message) => {
-
-  if (message.author.bot) return;
-  if (!message.content.startsWith("!cuenta")) return;
-
-  // Verificar rol staff
-  if (!message.member.roles.cache.has(ID_ROL_STAFF)) {
-    return message.reply("❌ No tenés permiso para usar este comando.");
-  }
-
-  const args = message.content.split(" ").slice(1);
-
-  if (args.length < 4) {
-    return message.reply("Uso:\n!cuenta correo contraseña juegos imagenURL");
-  }
-
-  const correo = args[0];
-  const contraseña = args[1];
-  const imagen = args[args.length - 1];
-  const juegos = args.slice(2, args.length - 1).join(" ");
-
-  // Leer contador
-  const data = JSON.parse(fs.readFileSync("./contador.json"));
-  data.numero += 1;
-  fs.writeFileSync("./contador.json", JSON.stringify(data, null, 2));
-
-  const numeroFormateado = String(data.numero).padStart(3, "0");
-
-  const canal = await client.channels.fetch(ID_CANAL_CUENTAS).catch(() => null);
-
-  if (!canal) {
-    return message.reply("❌ No se encontró el canal de cuentas.");
-  }
-
-  const embed = new EmbedBuilder()
-    .setTitle(`🎮 Cuenta #${numeroFormateado}`)
-    .addFields(
-      { name: "📧 Correo", value: correo },
-      { name: "🔐 Contraseña", value: `||${contraseña}||` },
-      { name: "🕹 Juegos", value: juegos }
-    )
-    .setImage(imagen)
-    .setColor("Blue")
-    .setTimestamp();
-
-  await canal.send({ embeds: [embed] });
-
-  // Borra mensaje original
-  await message.delete().catch(() => null);
-
-  message.channel.send(`✅ Cuenta #${numeroFormateado} enviada.`)
-    .then(msg => setTimeout(() => msg.delete().catch(() => null), 3000));
-});
-
-// ================= COMANDOS $ PARA TICKETS =================
-client.on("messageCreate", async (message) => {
-
-  if (message.author.bot) return;
-  if (!message.channel.name.startsWith("ticket-")) return;
-  if (!message.content.startsWith("$")) return;
-
-  // Solo staff puede usar estos comandos
-  if (!message.member.roles.cache.has(1465580669668429856)) {
-    return message.reply("❌ Solo el staff puede usar este comando.");
-  }
-
-  const comando = message.content.toLowerCase();
-
-  // ===== $transcript =====
-  if (comando === "$transcript") {
-
-    const mensajes = await message.channel.messages.fetch({ limit: 100 });
-
-    const transcript = mensajes
-      .map(m => `${m.author.tag}: ${m.content}`)
-      .reverse()
-      .join("\n");
-
-    const embed = new EmbedBuilder()
-      .setTitle("📄 Transcripción del Ticket")
-      .setDescription("Aquí está la transcripción del ticket.")
-      .setColor("Blue")
-      .setTimestamp();
-
-    await message.channel.send({
-      embeds: [embed],
-      files: [{
-        attachment: Buffer.from(transcript, "utf-8"),
-        name: "transcript.txt"
-      }]
-    });
-
-    await message.delete().catch(() => null);
-  }
-
-const esStaff = message.member.roles.cache.some(role => role.id === 1465580669668429856);
-
-if (!esStaff) {
-  return message.reply("❌ Solo el staff puede usar este comando.");
-}
-
-  // ================= COMANDOS $ PARA TICKETS =================
-client.on("messageCreate", async (message) => {
-
-  if (message.author.bot) return;
-  if (!message.channel.name.startsWith("ticket-")) return;
-  if (!message.content.startsWith("$")) return;
-
-  const comando = message.content.toLowerCase();
-
-  const esStaff = message.member.roles.cache.some(
-    role => role.id === ID_ROL_STAFF
-  );
-
-  if (!esStaff) {
-    return message.reply("❌ Solo el staff puede usar este comando.");
-  }
-
-  // ===== $transcript =====
-  if (comando === "$transcript") {
-
-    const mensajes = await message.channel.messages.fetch({ limit: 100 });
-
-    const transcript = mensajes
-      .map(m => `${m.author.tag}: ${m.content}`)
-      .reverse()
-      .join("\n");
-
-    const embed = new EmbedBuilder()
-      .setTitle("📄 Transcripción del Ticket")
-      .setColor("Blue")
-      .setTimestamp();
-
-    await message.channel.send({
-      embeds: [embed],
-      files: [{
-        attachment: Buffer.from(transcript, "utf-8"),
-        name: "transcript.txt"
-      }]
-    });
-
-    await message.delete().catch(() => null);
-  }
-
-  // ===== $delete =====
-  if (comando === "$delete") {
-
-    await message.reply("🔒 Cerrando ticket...");
-
-    const canal = message.channel;
-
-    try {
-      const mensajes = await canal.messages.fetch({ limit: 100 });
-
-      const transcript = mensajes
-        .map(m => `${m.author.tag}: ${m.content}`)
-        .reverse()
-        .join("\n");
-
-      const canalLogs = await message.guild.channels.fetch("1473033392118304960").catch(() => null);
-
-      if (canalLogs) {
-        const embedLog = new EmbedBuilder()
-          .setTitle("📁 Ticket Cerrado (Comando)")
-          .setDescription(`Canal: ${canal.name}\nCerrado por: ${message.author.tag}`)
-          .setColor("Red")
-          .setTimestamp();
-
-        await canalLogs.send({
-          embeds: [embedLog],
-          files: [{
-            attachment: Buffer.from(transcript, "utf-8"),
-            name: "transcript.txt"
-          }]
-        });
+        cooldownRespuestas.set(message.channel.id, true);
+        setTimeout(() => cooldownRespuestas.delete(message.channel.id), 10000);
+        break;
       }
+    }
+  }
 
-    } catch (err) {
-      console.error(err);
+  /* ===== COMANDO !cuenta ===== */
+  if (message.content.startsWith("!cuenta")) {
+
+    if (!message.member.roles.cache.has(ID_ROL_STAFF))
+      return message.reply("❌ No tenés permiso.");
+
+    const args = message.content.split(" ").slice(1);
+    if (args.length < 4)
+      return message.reply("Uso: !cuenta correo contraseña juegos imagenURL");
+
+    const correo = args[0];
+    const contraseña = args[1];
+    const imagen = args[args.length - 1];
+    const juegos = args.slice(2, args.length - 1).join(" ");
+
+    const data = JSON.parse(fs.readFileSync("./contador.json"));
+    data.numero += 1;
+    fs.writeFileSync("./contador.json", JSON.stringify(data, null, 2));
+
+    const numero = String(data.numero).padStart(3, "0");
+    const canal = await client.channels.fetch(ID_CANAL_CUENTAS);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🎮 Cuenta #${numero}`)
+      .addFields(
+        { name: "📧 Correo", value: correo },
+        { name: "🔐 Contraseña", value: `||${contraseña}||` },
+        { name: "🕹 Juegos", value: juegos }
+      )
+      .setImage(imagen)
+      .setColor("Blue");
+
+    await canal.send({ embeds: [embed] });
+    await message.delete().catch(() => null);
+  }
+
+  /* ===== COMANDOS $ ===== */
+  if (message.channel.name.startsWith("ticket-") && message.content.startsWith("$")) {
+
+    if (!message.member.roles.cache.has(ID_ROL_STAFF))
+      return message.reply("❌ Solo el staff puede usar esto.");
+
+    const comando = message.content.toLowerCase();
+
+    if (comando === "$transcript") {
+      const mensajes = await message.channel.messages.fetch({ limit: 100 });
+      const transcript = mensajes.map(m => `${m.author.tag}: ${m.content}`).reverse().join("\n");
+
+      await message.channel.send({
+        files: [{ attachment: Buffer.from(transcript), name: "transcript.txt" }]
+      });
+
+      await message.delete().catch(() => null);
     }
 
-    setTimeout(() => {
-      canal.delete().catch(() => null);
-    }, 2000);
+    if (comando === "$delete") {
+      await message.reply("🔒 Cerrando ticket...");
+      setTimeout(() => message.channel.delete().catch(() => null), 2000);
+    }
   }
 
 });
 
-});
-
-
-client.login(process.env.TOKEN);
+client.login(TOKEN);
